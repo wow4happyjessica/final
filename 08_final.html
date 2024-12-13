@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>他是好運 快點抓住他!</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            overflow: hidden;
+        }
+        #game-container {
+            text-align: center;
+            background-color: #ffffff;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        #target {
+            position: absolute;
+            border-radius: 50%;
+            background-color: red;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+        }
+        #score, #time, #level {
+            margin: 10px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .btn {
+            background-color: #17726d;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        #game-over {
+            display: none;
+            color: red;
+            font-size: 24px;
+            margin: 20px;
+        }
+        #difficulty-container {
+            display: none;
+            margin: 20px;
+        }
+        .restart-btn-container {
+            display: none;
+            flex-direction: column;
+        }
+        #rule-container {
+            text-align: left;
+            margin: 20px;
+            padding: 20px;
+            background-color: #eef6f6;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        #rule-container ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <!-- 規則說明區塊 -->
+        <div id="rule-container">
+            <h2>遊戲規則</h2>
+            <p>歡迎來到「抓住紅點」遊戲！遊戲規則如下：</p>
+            <ol>
+                <li>選擇一個遊戲難度（簡單、中等、困難）。</li>
+                <li>點擊出現在畫面上的紅點以獲得分數。</li>
+                <li>紅點會愈來愈小，累積 30 分即獲勝。</li>
+                <li>每次紅點出現的時間有限，未點擊紅點遊戲會結束！</li>
+                <li>試試挑戰高難度獲得更多樂趣吧！</li>
+            </ol>
+            <button class="btn" id="proceed-btn">了解規則，開始遊戲！</button>
+        </div>
+
+        <!-- 遊戲難度選擇區塊 -->
+        <div id="difficulty-container">
+            <button class="btn" id="easy-btn">簡單</button>
+            <button class="btn" id="medium-btn">中等</button>
+            <button class="btn" id="hard-btn">困難</button>
+        </div>
+
+        <!-- 遊戲資訊 -->
+        <div id="score">分數: 0</div>
+        <div id="time">時間倒數: 40s</div>
+        <div id="level">等級: 1</div>
+        <button class="btn" id="start-btn" style="display: none;">開始</button>
+        <div id="game-over">結束!</div>
+
+        <!-- 遊戲重新開始選項 -->
+        <div class="restart-btn-container" id="restart-container">
+            <button class="btn" id="restart-same-btn">重新開始同一難度</button>
+            <button class="btn" id="restart-difficulty-btn">重新選擇難度</button>
+        </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const ruleContainer = document.getElementById('rule-container');
+        const proceedBtn = document.getElementById('proceed-btn');
+        const targetElement = document.createElement('div');
+        targetElement.id = 'target';
+
+        const difficultyContainer = document.getElementById('difficulty-container');
+        const startBtn = document.getElementById('start-btn');
+        const gameOverDisplay = document.getElementById('game-over');
+        const restartContainer = document.getElementById('restart-container');
+        const restartSameBtn = document.getElementById('restart-same-btn');
+        const restartDifficultyBtn = document.getElementById('restart-difficulty-btn');
+
+        const scoreDisplay = document.getElementById('score');
+        const timeDisplay = document.getElementById('time');
+        const levelDisplay = document.getElementById('level');
+
+        let score = 0;
+        let timeLeft = 40;
+        let level = 1;
+        let timeInterval;
+        let idleTimeout;
+        let isGameRunning = false;
+        let idleTimeLimit = 3000; // 預設簡單模式（3秒）
+        let currentDifficulty = 'easy'; // 預設簡單模式
+
+        const clickSound = new Audio('./coin03.mp3');
+        const winSound = new Audio('./win.mp3');
+        const endSound = new Audio('./end.mp3');
+        const bgMusic = new Audio('./bird.mp3');
+        bgMusic.loop = true;
+
+        proceedBtn.addEventListener('click', () => {
+            ruleContainer.style.display = 'none';
+            difficultyContainer.style.display = 'block';
+        });
+
+        function setDifficulty(level) {
+            currentDifficulty = level;
+            switch (level) {
+                case 'easy':
+                    idleTimeLimit = 3000;
+                    break;
+                case 'medium':
+                    idleTimeLimit = 2000;
+                    break;
+                case 'hard':
+                    idleTimeLimit = 1000;
+                    break;
+            }
+            difficultyContainer.style.display = 'none';
+            startBtn.style.display = 'block';
+        }
+
+        function createTarget() {
+            const existingTarget = document.getElementById('target');
+            if (existingTarget) {
+                existingTarget.remove();
+            }
+
+            const maxX = window.innerWidth - 100;
+            const maxY = window.innerHeight - 100;
+
+            targetElement.style.left = `${Math.random() * maxX}px`;
+            targetElement.style.top = `${Math.random() * maxY}px`;
+
+            const targetSize = Math.max(20, 50 - (level * 5));
+            targetElement.style.width = `${targetSize}px`;
+            targetElement.style.height = `${targetSize}px`;
+
+            targetElement.textContent = level;
+
+            gameContainer.appendChild(targetElement);
+
+            resetIdleTimer();
+        }
+
+        function handleTargetClick() {
+            if (!isGameRunning) return;
+
+            clickSound.play();
+
+            score++;
+            scoreDisplay.textContent = `分數: ${score}`;
+
+            if (score >= 30) {
+                endGame(true);
+                return;
+            }
+
+            if (score % 5 === 0) {
+                level++;
+                levelDisplay.textContent = `等級: ${level}`;
+            }
+
+            createTarget();
+        }
+
+        function startGame() {
+            bgMusic.play();
+
+            score = 0;
+            timeLeft = 40;
+            level = 1;
+            scoreDisplay.textContent = '分數: 0';
+            timeDisplay.textContent = '時間倒數: 40s';
+            levelDisplay.textContent = '等級: 1';
+            gameOverDisplay.style.display = 'none';
+            startBtn.style.display = 'none';
+            restartContainer.style.display = 'none';
+            isGameRunning = true;
+
+            createTarget();
+            targetElement.addEventListener('click', handleTargetClick);
+
+            timeInterval = setInterval(() => {
+                timeLeft--;
+                timeDisplay.textContent = `時間倒數: ${timeLeft}s`;
+
+                if (timeLeft <= 0) {
+                    endGame(false);
+                }
+            }, 1000);
+
+            resetIdleTimer();
+        }
+
+        function resetIdleTimer() {
+            if (!isGameRunning) return;
+
+            clearTimeout(idleTimeout);
+
+            idleTimeout = setTimeout(() => {
+                endGame(false, '未能抓住紅點！遊戲結束!');
+            }, idleTimeLimit);
+        }
+
+        function endGame(isWin, message) {
+            bgMusic.pause();
+            bgMusic.currentTime = 0;
+
+            if (isWin) {
+                winSound.play();
+            } else {
+                endSound.play();
+            }
+
+            clearInterval(timeInterval);
+            clearTimeout(idleTimeout);
+            isGameRunning = false;
+
+            const existingTarget = document.getElementById('target');
+            if (existingTarget) {
+                existingTarget.remove();
+            }
+
+            targetElement.removeEventListener('click', handleTargetClick);
+            gameOverDisplay.style.display = 'block';
+            gameOverDisplay.textContent = isWin ? '勝利!' : message || '時間到了，遊戲結束!';
+            restartContainer.style.display = 'flex';
+        }
+
+        document.getElementById('easy-btn').addEventListener('click', () => setDifficulty('easy'));
+        document.getElementById('medium-btn').addEventListener('click', () => setDifficulty('medium'));
+        document.getElementById('hard-btn').addEventListener('click', () => setDifficulty('hard'));
+        startBtn.addEventListener('click', startGame);
+        restartSameBtn.addEventListener('click', startGame);
+        restartDifficultyBtn.addEventListener('click', () => {
+            restartContainer.style.display = 'none';
+            difficultyContainer.style.display = 'block';
+        });
+    </script>
+</body>
+</html>
